@@ -1,0 +1,442 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kanban To‑Do • Pending / In‑Progress / Completed</title>
+  <meta name="description" content="Clean, modern Kanban to‑do board with drag‑and‑drop and localStorage persistence." />
+  <style>
+    :root{
+      --bg: #0f172a;           /* slate-900 */
+      --panel: #0b1226ee;      /* slightly transparent */
+      --muted: #94a3b8;        /* slate-400 */
+      --text: #e2e8f0;         /* slate-200 */
+      --card: #111827;         /* gray-900 */
+      --card-2: #0b1226;       
+      --accent: #6366f1;       /* indigo-500 */
+      --accent-2:#22d3ee;      /* cyan-400 */
+      --ok:#22c55e;            /* green-500 */
+      --warn:#f59e0b;          /* amber-500 */
+      --danger:#ef4444;        /* red-500 */
+      --ring: #334155aa;
+      --shadow: 0 10px 25px rgba(0,0,0,.35), 0 2px 6px rgba(0,0,0,.25);
+      --radius: 18px;
+    }
+
+    *{box-sizing:border-box}
+    html, body {height:100%}
+    body{
+      margin:0; background:
+        radial-gradient(1200px 800px at 10% -10%, #1e293b 0%, rgba(30,41,59,0) 60%),
+        radial-gradient(1200px 800px at 110% 10%, #0ea5e9 0%, rgba(14,165,233,0) 40%),
+        linear-gradient(180deg, #0b1020, #0b1020); 
+      color:var(--text);
+      font: 16px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, "Helvetica Neue", Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      letter-spacing:.2px;
+    }
+
+    header{
+      position:sticky; top:0; z-index:10; 
+      backdrop-filter:saturate(130%) blur(10px);
+      background: linear-gradient(180deg, rgba(11,16,32,.85), rgba(11,16,32,.6));
+      border-bottom:1px solid #1f2a44;
+    }
+    .wrap{max-width:1200px; margin:0 auto; padding:16px 20px;}
+
+    .brand{
+      display:flex; align-items:center; gap:12px;
+    }
+    .brand .logo{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(135deg,var(--accent),var(--accent-2));box-shadow:var(--shadow)}
+    .brand h1{font-size:18px; margin:0; font-weight:700; letter-spacing:.3px}
+    .sub{font-size:12px; color:var(--muted)}
+
+    .toolbar{display:flex; gap:10px; align-items:center; flex-wrap:wrap}
+    .toolbar input[type="text"]{
+      background:var(--card-2); border:1px solid #1f2a44; color:var(--text);
+      padding:10px 12px; border-radius:12px; width:min(380px, 70vw);
+      outline:none; box-shadow: inset 0 0 0 1px transparent; transition: box-shadow .15s ease;
+    }
+    .toolbar input[type="text"]:focus{ box-shadow: 0 0 0 3px var(--ring);} 
+
+    .btn{
+      border:none; color:#0b1020; background:linear-gradient(135deg,var(--accent),var(--accent-2));
+      padding:10px 14px; border-radius:12px; font-weight:700; cursor:pointer; box-shadow:var(--shadow);
+    }
+    .btn.secondary{background:#111827; color:var(--text); border:1px solid #1f2a44; box-shadow:none}
+    .btn.ghost{background:transparent; color:var(--muted); border:1px dashed #263552}
+    .btn:active{transform:translateY(1px)}
+
+    .board{max-width:1200px; margin:20px auto; padding:0 20px 40px}
+    .columns{display:grid; grid-template-columns: repeat(3, 1fr); gap:16px}
+
+    .col{background:linear-gradient(180deg, rgba(255,255,255,.03), rgba(255,255,255,.01));
+      border:1px solid #1f2a44; border-radius: var(--radius); padding:12px; min-height:420px; box-shadow: var(--shadow);
+    }
+    .col header{position:relative; top:auto; backdrop-filter:none; background:transparent; border:none; padding:6px 6px 10px}
+    .col h2{display:flex; align-items:center; justify-content:space-between; margin:0 0 8px; font-size:14px; text-transform:uppercase; letter-spacing:.8px; color:#cbd5e1}
+    .pill{font-size:12px; padding:4px 8px; border-radius:999px; color:#0b1020; font-weight:700}
+    .pill.pending{background:var(--warn)}
+    .pill.progress{background:var(--accent)}
+    .pill.done{background:var(--ok)}
+
+    .dropzone{display:flex; flex-direction:column; gap:10px; min-height:320px; padding:4px}
+    .dropzone.drag-over{outline:2px dashed #3b82f6; outline-offset:-6px; border-radius:14px}
+
+    .card{
+      background: linear-gradient(180deg, #0f172a, #0b1226);
+      border:1px solid #1f2a44; border-radius:14px; padding:12px; cursor:grab; user-select:none; 
+      box-shadow: 0 5px 14px rgba(0,0,0,.25);
+    }
+    .card:active{cursor:grabbing}
+    .card.dragging{opacity:.35}
+    .card .top{display:flex; align-items:center; justify-content:space-between; gap:8px}
+    .title{font-weight:700}
+    .meta{font-size:12px; color:var(--muted)}
+
+    .actions{display:flex; gap:6px}
+    .icon-btn{background:#0b1026; border:1px solid #213055; color:#cbd5e1; border-radius:10px; padding:6px 8px; cursor:pointer}
+    .icon-btn:hover{background:#111c35}
+
+    .empty{display:grid; place-items:center; gap:8px; color:var(--muted); border:1px dashed #243357; border-radius:12px; padding:18px}
+
+    .footer{max-width:1200px; margin:0 auto; padding:0 20px 30px; color:var(--muted); font-size:13px}
+    .counts{display:flex; gap:12px; flex-wrap:wrap}
+    .count{background:#0b1226; border:1px solid #1f2a44; padding:8px 10px; border-radius:10px}
+
+    @media (max-width: 900px){
+      .columns{grid-template-columns:1fr;}
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div class="wrap" style="display:flex; align-items:center; justify-content:space-between; gap:14px; flex-wrap:wrap">
+      <div class="brand">
+        <div class="logo" aria-hidden="true">
+          <!-- Inline spark icon -->
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M12 2l2.2 5.7L20 10l-5.8 2.3L12 18l-2.2-5.7L4 10l5.8-2.3L12 2z" fill="white"/>
+          </svg>
+        </div>
+        <div>
+          <h1>Kanban To‑Do</h1>
+          <div class="sub">Pending • In‑Progress • Completed</div>
+        </div>
+      </div>
+
+      <div class="toolbar">
+        <input id="newTask" type="text" placeholder="Add a new task… (press Enter)" aria-label="Add a new task" />
+        <button class="btn" id="addBtn" title="Add task">Add Task</button>
+        <button class="btn secondary" id="resetBtn" title="Reset board">Reset</button>
+        <button class="btn ghost" id="exportBtn" title="Export to JSON">Export</button>
+        <input id="importFile" type="file" accept="application/json" style="display:none"/>
+      </div>
+    </div>
+  </header>
+
+  <main class="board" aria-live="polite">
+    <section class="columns" id="columns">
+      <!-- Pending -->
+      <div class="col" data-status="pending">
+        <header>
+          <h2>
+            <span>Pending</span>
+            <span class="pill pending" id="count-pending">0</span>
+          </h2>
+        </header>
+        <div class="dropzone" id="zone-pending" role="list" aria-label="Pending tasks"></div>
+      </div>
+
+      <!-- In Progress -->
+      <div class="col" data-status="inprogress">
+        <header>
+          <h2>
+            <span>In‑Progress</span>
+            <span class="pill progress" id="count-inprogress">0</span>
+          </h2>
+        </header>
+        <div class="dropzone" id="zone-inprogress" role="list" aria-label="In‑Progress tasks"></div>
+      </div>
+
+      <!-- Completed -->
+      <div class="col" data-status="completed">
+        <header>
+          <h2>
+            <span>Completed</span>
+            <span class="pill done" id="count-completed">0</span>
+          </h2>
+        </header>
+        <div class="dropzone" id="zone-completed" role="list" aria-label="Completed tasks"></div>
+      </div>
+    </section>
+  </main>
+
+  <div class="footer wrap">
+    <div class="counts" id="counts"></div>
+    <div style="margin-top:8px">Data is saved automatically to your browser (localStorage).</div>
+  </div>
+
+  <template id="card-tpl">
+    <article class="card" draggable="true" role="listitem">
+      <div class="top">
+        <div class="title"></div>
+        <div class="actions">
+          <button class="icon-btn" data-action="edit" title="Edit">✏️</button>
+          <button class="icon-btn" data-action="delete" title="Delete">🗑️</button>
+        </div>
+      </div>
+      <div class="meta"></div>
+    </article>
+  </template>
+
+  <script>
+  (function(){
+    const STORAGE_KEY = 'kanbanTasksV1';
+
+    /** @type {Array<{id:string,text:string,status:'pending'|'inprogress'|'completed',order:number,created:number,updated:number}>} */
+    let tasks = [];
+
+    const el = sel => document.querySelector(sel);
+    const els = sel => Array.from(document.querySelectorAll(sel));
+
+    const zones = {
+      pending: el('#zone-pending'),
+      inprogress: el('#zone-inprogress'),
+      completed: el('#zone-completed')
+    };
+
+    const counts = {
+      pending: el('#count-pending'),
+      inprogress: el('#count-inprogress'),
+      completed: el('#count-completed')
+    };
+
+    // --- Persistence ---
+    function save(){ localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); updateCounts(); }
+    function load(){
+      try{
+        const raw = localStorage.getItem(STORAGE_KEY);
+        tasks = raw ? JSON.parse(raw) : sampleData();
+      }catch(e){ tasks = sampleData(); }
+    }
+
+    function sampleData(){
+      const now = Date.now();
+      return [
+        mkTask('Plan project structure', 'pending', now-500000),
+        mkTask('Design task card UI', 'inprogress', now-400000),
+        mkTask('Implement drag & drop', 'pending', now-300000),
+        mkTask('Hook up localStorage', 'completed', now-200000),
+        mkTask('Polish styles & shadows', 'inprogress', now-100000)
+      ];
+    }
+
+    function mkTask(text, status='pending', created=Date.now()){
+      const order = nextOrder(status);
+      const id = cryptoRandomId();
+      return { id, text, status, order, created, updated: created };
+    }
+
+    function cryptoRandomId(){
+      if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
+      return 'id-'+Math.random().toString(36).slice(2,9);
+    }
+
+    function nextOrder(status){
+      const os = tasks.filter(t=>t.status===status).map(t=>t.order);
+      return (os.length? Math.max(...os):0) + 1;
+    }
+
+    // --- Render ---
+    function render(){
+      Object.values(zones).forEach(z=>z.innerHTML='');
+      const tpl = el('#card-tpl');
+      ['pending','inprogress','completed'].forEach(status=>{
+        tasks
+          .filter(t=>t.status===status)
+          .sort((a,b)=>a.order-b.order)
+          .forEach(t=>{
+            const node = tpl.content.firstElementChild.cloneNode(true);
+            node.dataset.id = t.id;
+            node.querySelector('.title').textContent = t.text;
+            node.querySelector('.meta').textContent = formatMeta(t);
+            attachCardEvents(node);
+            zones[status].appendChild(node);
+          });
+
+        if (!zones[status].children.length){
+          const empty = document.createElement('div');
+          empty.className = 'empty';
+          empty.textContent = 'Drop tasks here';
+          zones[status].appendChild(empty);
+        }
+      });
+      updateCounts();
+    }
+
+    function formatMeta(t){
+      const d = new Date(t.created); 
+      return `Created ${d.toLocaleDateString()} · Order ${t.order}`;
+    }
+
+    function updateCounts(){
+      ['pending','inprogress','completed'].forEach(s=>{
+        counts[s].textContent = tasks.filter(t=>t.status===s).length;
+      });
+      // footer counts
+      const footer = el('#counts');
+      const total = tasks.length;
+      const done = tasks.filter(t=>t.status==='completed').length;
+      footer.innerHTML = `
+        <span class="count">Total: ${total}</span>
+        <span class="count">Pending: ${counts.pending.textContent}</span>
+        <span class="count">In‑Progress: ${counts.inprogress.textContent}</span>
+        <span class="count">Completed: ${counts.completed.textContent}</span>
+        <span class="count">Progress: ${total? Math.round(done/total*100):0}%</span>`;
+    }
+
+    // --- Card interactions ---
+    function attachCardEvents(card){
+      card.addEventListener('dragstart', onDragStart);
+      card.addEventListener('dragend', onDragEnd);
+      card.querySelector('[data-action="edit"]').addEventListener('click', ()=>editCard(card));
+      card.querySelector('[data-action="delete"]').addEventListener('click', ()=>deleteCard(card));
+      // keyboard move: space to pick up, arrows to move between columns
+      card.tabIndex = 0;
+      card.addEventListener('keydown', (e)=>{
+        const id = card.dataset.id;
+        const idx = tasks.findIndex(t=>t.id===id);
+        if(idx<0) return;
+        if(e.key==='Enter'){ editCard(card); }
+        if(e.key==='Delete'){ deleteCard(card); }
+        if(e.key==='ArrowRight' || e.key==='ArrowLeft'){
+          const order = nextOrder(tasks[idx].status);
+          const seq = ['pending','inprogress','completed'];
+          let s = seq.indexOf(tasks[idx].status);
+          if(e.key==='ArrowRight' && s<2) s++; else if(e.key==='ArrowLeft' && s>0) s--; else return;
+          tasks[idx].status = seq[s];
+          tasks[idx].order = order;
+          tasks[idx].updated = Date.now();
+          save(); render(); card.focus();
+        }
+      });
+    }
+
+    function editCard(card){
+      const id = card.dataset.id; const t = tasks.find(x=>x.id===id); if(!t) return;
+      const val = prompt('Edit task', t.text);
+      if(val!==null){ t.text = val.trim()||t.text; t.updated=Date.now(); save(); render(); }
+    }
+
+    function deleteCard(card){
+      const id = card.dataset.id;
+      const t = tasks.find(x=>x.id===id);
+      if(!t) return;
+      if(confirm('Delete this task?')){
+        tasks = tasks.filter(x=>x.id!==id);
+        save(); render();
+      }
+    }
+
+    // --- DnD logic ---
+    let dragId = null;
+
+    function onDragStart(e){
+      dragId = e.currentTarget.dataset.id;
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', dragId);
+      e.currentTarget.classList.add('dragging');
+    }
+
+    function onDragEnd(e){
+      e.currentTarget.classList.remove('dragging');
+      dragId = null;
+    }
+
+    Object.values(zones).forEach(zone=>{
+      zone.addEventListener('dragover', (e)=>{
+        e.preventDefault();
+        zone.classList.add('drag-over');
+        const after = getDragAfterElement(zone, e.clientY);
+        const dragging = document.querySelector('.card.dragging');
+        if(!dragging) return;
+        if(after==null){ zone.appendChild(dragging); }
+        else { zone.insertBefore(dragging, after); }
+      });
+      zone.addEventListener('dragleave', ()=> zone.classList.remove('drag-over'));
+      zone.addEventListener('drop', (e)=>{
+        e.preventDefault(); zone.classList.remove('drag-over');
+        const id = e.dataTransfer.getData('text/plain') || dragId; if(!id) return;
+        const status = zone.id.replace('zone-','');
+        // compute new order based on DOM position
+        const idsInZone = Array.from(zone.querySelectorAll('.card')).map(n=>n.dataset.id);
+        // filter out the dragged id, then insert it at current DOM index
+        const clean = idsInZone.filter(x=>x); // already ordered visually
+        // Update tasks: set status, then set order sequentially in this column
+        // Place dragged item into this status first
+        const t = tasks.find(x=>x.id===id); if(!t) return;
+        t.status = status; t.updated = Date.now();
+        // Now sequentially assign order numbers by the DOM order
+        const colIds = clean;
+        colIds.forEach((tid,i)=>{
+          const tt = tasks.find(x=>x.id===tid); if(tt){ tt.status=status; tt.order = i+1; tt.updated = Date.now(); }
+        });
+        save(); render();
+      });
+    });
+
+    function getDragAfterElement(container, y){
+      const els = [...container.querySelectorAll('.card:not(.dragging)')];
+      return els.reduce((closest, child)=>{
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height/2;
+        if(offset < 0 && offset > closest.offset) return { offset, element: child };
+        else return closest;
+      }, { offset: Number.NEGATIVE_INFINITY }).element || null;
+    }
+
+    // --- Toolbar ---
+    const input = el('#newTask');
+    const addBtn = el('#addBtn');
+    const resetBtn = el('#resetBtn');
+    const exportBtn = el('#exportBtn');
+    const importFile = el('#importFile');
+
+    input.addEventListener('keydown', (e)=>{ if(e.key==='Enter'){ createTask(); } });
+    addBtn.addEventListener('click', createTask);
+
+    function createTask(){
+      const text = input.value.trim(); if(!text) return;
+      const t = mkTask(text, 'pending'); tasks.push(t); input.value=''; save(); render();
+    }
+
+    resetBtn.addEventListener('click', ()=>{
+      if(confirm('Reset board to example tasks? This will overwrite your current list.')){
+        tasks = sampleData(); save(); render();
+      }
+    });
+
+    exportBtn.addEventListener('click', ()=>{
+      const data = new Blob([JSON.stringify(tasks, null, 2)], {type:'application/json'});
+      const url = URL.createObjectURL(data);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'kanban-todos.json'; a.click(); URL.revokeObjectURL(url);
+    });
+
+    // Hidden import
+    exportBtn.addEventListener('contextmenu', (e)=>{ e.preventDefault(); importFile.click(); });
+    importFile.addEventListener('change', async (e)=>{
+      const file = e.target.files[0]; if(!file) return;
+      const text = await file.text();
+      try{ const arr = JSON.parse(text); if(Array.isArray(arr)){ tasks = arr; save(); render(); } }
+      catch(err){ alert('Invalid JSON file.'); }
+      importFile.value = '';
+    });
+
+    // --- Init ---
+    load();
+    render();
+  })();
+  </script>
+</body>
+</html>
